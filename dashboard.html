@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SysX-Forc - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <h2>🔥 SYSX-FORC</h2>
+            </div>
+            <nav>
+                <ul>
+                    <li class="active" data-page="dashboard">📊 Dashboard</li>
+                    <li data-page="executed">⚡ Executed</li>
+                    <li data-page="sender">📤 Sender</li>
+                </ul>
+            </nav>
+            <button id="logoutBtn" class="logout-btn">🚪 Logout</button>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <!-- DASHBOARD PAGE -->
+            <section id="page-dashboard" class="page active">
+                <div class="profile-card">
+                    <video autoplay muted loop playsinline class="profile-video">
+                        <source src="https://www.gobox.my.id/file/Ctw42iB3HzQZ.mp4" type="video/mp4">
+                    </video>
+                    <div class="profile-info">
+                        <h3>👤 SysX-Forc User</h3>
+                        <p>Status: <span class="status-online">● Online</span></p>
+                        <p>Device: Ubuntu/Linux</p>
+                        <p>Pair Code: <span id="pairCodeDisplay">-</span></p>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4>Target Terkirim</h4>
+                        <p id="totalExecuted">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Status Koneksi</h4>
+                        <p id="connectionStatus">⏳ Connecting...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- EXECUTED PAGE -->
+            <section id="page-executed" class="page">
+                <h2>⚡ EXECUTE CRASHER</h2>
+                <div class="exec-form">
+                    <div class="form-group">
+                        <label>📱 Nomor Target (WA):</label>
+                        <input type="text" id="targetNumber" placeholder="6281234567890">
+                    </div>
+                    <button id="executeBtn" class="btn-danger">💀 EXECUTE CRASH</button>
+                    <div id="execResult" class="result-box"></div>
+                </div>
+                <div class="history-list">
+                    <h3>📜 Riwayat Eksekusi</h3>
+                    <ul id="historyList"></ul>
+                </div>
+            </section>
+
+            <!-- SENDER PAGE -->
+            <section id="page-sender" class="page">
+                <h2>📤 SENDER & PAIRING</h2>
+                <div class="sender-form">
+                    <div class="form-group">
+                        <label>📱 Nomor Sender (HP lu):</label>
+                        <input type="text" id="senderNumber" placeholder="6281234567890">
+                    </div>
+                    <button id="pairBtn" class="btn-primary">🔗 Generate Pair Code</button>
+                    <div id="pairResult" class="result-box"></div>
+                </div>
+
+                <div class="device-info">
+                    <h3>🖥️ Perangkat Tertaut</h3>
+                    <ul>
+                        <li>🐧 Ubuntu 22.04</li>
+                        <li>🐧 Linux Debian</li>
+                        <li>🪟 Windows (via WSL)</li>
+                        <li>🍎 macOS (via Terminal)</li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // === GLOBAL VARIABLE ===
+        let history = JSON.parse(localStorage.getItem('sysx_history') || '[]');
+        let totalExec = history.length;
+
+        // === LOAD DATA ===
+        document.addEventListener('DOMContentLoaded', () => {
+            updateHistory();
+            updateStats();
+            checkConnection();
+            getPairCode();
+
+            // === NAVIGATION ===
+            document.querySelectorAll('nav ul li').forEach(item => {
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('nav ul li').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    
+                    const page = item.dataset.page;
+                    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                    document.getElementById(`page-${page}`).classList.add('active');
+                });
+            });
+
+            // === LOGOUT ===
+            document.getElementById('logoutBtn').addEventListener('click', async () => {
+                if (confirm('Yakin mau logout, BANGSAT?')) {
+                    try {
+                        await fetch('/api/logout', { method: 'POST' });
+                        localStorage.clear();
+                        window.location.href = '/';
+                    } catch (err) {
+                        alert('Error logout: ' + err.message);
+                    }
+                }
+            });
+
+            // === EXECUTE CRASH ===
+            document.getElementById('executeBtn').addEventListener('click', async () => {
+                const target = document.getElementById('targetNumber').value.trim();
+                if (!target) {
+                    alert('Masukkan nomor target, KONTOL!');
+                    return;
+                }
+
+                const resultDiv = document.getElementById('execResult');
+                resultDiv.innerHTML = '⏳ Mengirim crash ke ' + target + '...';
+
+                try {
+                    const res = await fetch('/api/execute', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ target })
+                    });
+
+                    const data = await res.json();
+                    if (data.success) {
+                        resultDiv.innerHTML = '✅ ' + data.message;
+                        history.push({ target, time: new Date().toLocaleString(), status: 'SUCCESS' });
+                        localStorage.setItem('sysx_history', JSON.stringify(history));
+                        updateHistory();
+                        updateStats();
+                    } else {
+                        resultDiv.innerHTML = '❌ ' + data.error;
+                    }
+                } catch (err) {
+                    resultDiv.innerHTML = '❌ Error: ' + err.message;
+                }
+            });
+
+            // === PAIR CODE ===
+            document.getElementById('pairBtn').addEventListener('click', async () => {
+                const number = document.getElementById('senderNumber').value.trim();
+                if (!number) {
+                    alert('Masukkan nomor HP lu, ANJING!');
+                    return;
+                }
+
+                const resultDiv = document.getElementById('pairResult');
+                resultDiv.innerHTML = '⏳ Generating pair code...';
+
+                try {
+                    const res = await fetch('/api/pair', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ number })
+                    });
+
+                    const data = await res.json();
+                    if (data.pairCode) {
+                        resultDiv.innerHTML = `✅ Pair Code: <strong>${data.pairCode}</strong><br>Masukkan kode ini di WhatsApp lu!`;
+                        document.getElementById('pairCodeDisplay').textContent = data.pairCode;
+                    } else {
+                        resultDiv.innerHTML = '❌ ' + (data.error || 'Gagal generate pair code');
+                    }
+                } catch (err) {
+                    resultDiv.innerHTML = '❌ Error: ' + err.message;
+                }
+            });
+        });
+
+        // === FUNGSI-FUNGSI ===
+        async function checkConnection() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const statusEl = document.getElementById('connectionStatus');
+                if (data.connected) {
+                    statusEl.innerHTML = '✅ Connected';
+                    statusEl.style.color = '#00ff88';
+                } else {
+                    statusEl.innerHTML = '❌ Disconnected - Pair dulu!';
+                    statusEl.style.color = '#ff4444';
+                }
+            } catch (err) {
+                console.error('Gagal cek status:', err);
+            }
+        }
+
+        async function getPairCode() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                if (data.pairCode) {
+                    document.getElementById('pairCodeDisplay').textContent = data.pairCode;
+                }
+            } catch (err) {}
+        }
+
+        function updateHistory() {
+            const list = document.getElementById('historyList');
+            list.innerHTML = '';
+            history.slice().reverse().forEach(item => {
+                const li = document.createElement('li');
+                li.innerHTML = `📱 ${item.target} - ${item.time} - <span style="color:#00ff88">${item.status}</span>`;
+                list.appendChild(li);
+            });
+        }
+
+        function updateStats() {
+            document.getElementById('totalExecuted').textContent = history.length;
+        }
+
+        // Auto refresh status setiap 10 detik
+        setInterval(() => {
+            checkConnection();
+            getPairCode();
+        }, 10000);
+    </script>
+</body>
+</html>
