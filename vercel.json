@@ -1,5 +1,12 @@
 {
   "version": 2,
+  "functions": {
+    "server.js": {
+      "runtime": "nodejs20.x",
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
   "builds": [
     {
       "src": "server.js",
@@ -17,7 +24,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/public/$1"
+      "dest": "public/$1"
     }
   ]
 }
