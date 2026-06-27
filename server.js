@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, makeInMemoryStore } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
@@ -19,9 +19,7 @@ let sock = null;
 let isConnected = false;
 let pairCode = '';
 let reconnectAttempts = 0;
-const MAX_RECONNECT = 10;
-
-const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
+const MAX_RECONNECT = 5;
 
 // ==================== FUNGSI CRASH ====================
 async function crashpack(sock, jid) {
@@ -124,6 +122,7 @@ async function connectWA() {
     try {
         console.log('🔄 Connecting to WhatsApp...');
 
+        // Hapus auth_info kalo corrupt
         if (fs.existsSync('auth_info')) {
             try {
                 const credsPath = path.join('auth_info', 'creds.json');
@@ -154,8 +153,6 @@ async function connectWA() {
             defaultQueryTimeoutMs: 30000,
             keepAliveIntervalMs: 10000
         });
-
-        store.bind(sock.ev);
 
         sock.ev.on('creds.update', saveCreds);
 
